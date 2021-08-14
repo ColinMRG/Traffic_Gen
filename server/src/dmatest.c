@@ -5,9 +5,12 @@
 #include <xil_io.h>
 #include "xscugic.h"
 #include "xparameters.h"
-#include "addressparams.h"
+#include "xaxidma_hw.h"
+
+#include "../../server/src/addressparams.h"
 
 
+u32 dmabuf[BUF_LEN/4];
 
 XScuGic InterruptController;
 
@@ -80,7 +83,29 @@ int dma()
 		Xil_Out32(XPAR_TRAFFICGEN_0_S00_AXI_BASEADDR, 1);
 		Xil_Out32(XPAR_TRAFFICGEN_0_S00_AXI_BASEADDR+0x4, NUM_OF_WORDS);
 
-
 		return buffer;
 
+}
+int wait_for_dma_done()
+{
+	u32 status;
+	while (1) {
+		status = Xil_In32(XPAR_AXI_DMA_0_BASEADDR + XAXIDMA_RX_OFFSET + XAXIDMA_SR_OFFSET);
+		int idle = status & XAXIDMA_SR_IDLE_MASK;
+		if (idle)
+			break;
+	}
+	return 0;
+}
+
+int dma_recvd_length()
+{
+	int i;
+	for (i = 0; i < sizeof(dmabuf)/sizeof(u32); i++) {
+		if (dmabuf[i] == 0)
+			break;
+	}
+	u32 word = Xil_In32(XPAR_AXI_DMA_0_BASEADDR + XAXIDMA_RX_OFFSET + XAXIDMA_BUFFLEN_OFFSET);
+	int length = word & 0x000FFFFF;
+	return length;
 }

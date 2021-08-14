@@ -12,7 +12,7 @@
 *
 *****************************************************************************/
 
-#include "ps7_init.h"
+#include "../../server/src/ps7_init.h"
 
 unsigned long ps7_pll_init_data_3_0[] = {
     // START: top

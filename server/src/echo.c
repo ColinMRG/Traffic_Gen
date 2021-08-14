@@ -38,11 +38,7 @@
 #endif
 
 u32 b[NUM_OF_WORDS];
-
-static int   	arr1[NUM_OF_WORDS/4];
-static int 		arr2[NUM_OF_WORDS/4];
-static int   	arr3[NUM_OF_WORDS/4];
-static int 		arr4[NUM_OF_WORDS/4];
+int dma_length;
 
 int transfer_data() {
 	return 0;
@@ -57,7 +53,9 @@ void print_app_header()
 #endif
 	xil_printf("TCP packets sent to port 6001 will be echoed back\n\r");
 }
-
+u32  *txptr = b;
+int txlen = 0;
+int dma();
 err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
                                struct pbuf *p, err_t err)
 {
@@ -67,68 +65,54 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 		tcp_recv(tpcb, NULL);
 		return ERR_OK;
 	}
-
 	/* indicate that the packet has been received */
 	tcp_recved(tpcb, p->len);
 
 	int command;
 	command = (int)*((u8*)(p->payload));
 
-	/* echo back the payload */
-	/* in this case, we assume that the payload is < TCP_SND_BUF */
+	int status = dma();
+
+	if (status){
+		for (int i=0; i<NUM_OF_WORDS; i++){
+			b[i]=Xil_In32(OFFSET_MEM_WRITE +4*i);
+		}
+
+	}
+
+	dma_length = dma_recvd_length();
+
+	int* dma_len_ptr;
+
+	dma_len_ptr = &dma_length;
 
 
-	if (tcp_sndbuf(tpcb) > NUM_OF_WORDS/4) {
+	if (tcp_sndbuf(tpcb) >= TCP_MAX) {
 
 
-			int k1 = 0, k2 = 0,k3 = 0, k4 = 0, i, pos = NUM_OF_WORDS/4;
 
-			int status = dma();
+			xil_printf("dma_length is %d\n\r",dma_length);
+			txlen = (dma_length <= TCP_MAX)?dma_length : TCP_MAX;
+			dma_length -= txlen;
 
-			if (status){
-				for (int i=0; i<NUM_OF_WORDS; i++){
-					b[i]=Xil_In32(OFFSET_MEM_WRITE +4*i);
-
-				}
-
-				for (i = 0; i<NUM_OF_WORDS; i++)
-					for(i=0;i<NUM_OF_WORDS; i++)
-					{
-						 if (i < pos)
-							arr1[k1++] = b[i];
-						else if ((i >= pos) && i < (pos * 2))
-							arr2[k2++] = b[i];
-						else if ((i >= pos * 2) && i < (pos * 3))
-							arr3[k3++] = b[i];
-						else
-							arr4[k4++] = b[i];
-					}
-			}
-
+			//Condition for sending data
 			if(command == '1'){
 
-				err = tcp_write(tpcb,arr1,sizeof(arr1), 1);
-				xil_printf("Command entered is  %d\n\r",command);
+				if (dma_length >= 0){
+					err = tcp_write(tpcb,txptr,txlen*4,1);
+					txptr += txlen;
+//					xil_printf(" pointer after the counter %d\n\r",txlen);
 
+				}
 			}
-			if(command == '2'){
+			// SEND SOS
+			else if (command == '2'){
 
-
-				err = tcp_write(tpcb,arr2,sizeof(arr2), 1);
-
-			}
-
-			if(command == '3'){
-
-				err = tcp_write(tpcb,arr3,sizeof(arr3), 1);
+				err = tcp_write(tpcb,*dma_len_ptr,sizeof(int),1);
+				xil_printf("%d\n\r", *dma_len_ptr);
 
 			}
 
-			if(command == '4'){
-
-				err = tcp_write(tpcb,arr4,sizeof(arr4), 1);
-
-			}
 
 		} else
 		xil_printf("no space in tcp_sndbuf\n\r");

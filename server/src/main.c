@@ -153,7 +153,7 @@ int main()
 	netmask.addr = 0;
 #else
 	/* initialize IP addresses to be used */
-	IP4_ADDR(&ipaddr,  192, 168,   1, 10);
+	IP4_ADDR(&ipaddr,  10, 0,   2, 2);
 	IP4_ADDR(&netmask, 255, 255, 255,  0);
 	IP4_ADDR(&gw,      192, 168,   1,  1);
 #endif
@@ -208,8 +208,8 @@ int main()
 	if (dhcp_timoutcntr <= 0) {
 		if ((echo_netif->ip_addr.addr) == 0) {
 			xil_printf("DHCP Timeout\r\n");
-			xil_printf("Configuring default IP of 192.168.1.10\r\n");
-			IP4_ADDR(&(echo_netif->ip_addr),  192, 168,   1, 10);
+			xil_printf("Configuring default IP of 10.0.2.2\r\n");
+			IP4_ADDR(&(echo_netif->ip_addr),  10, 0,   2, 2);
 			IP4_ADDR(&(echo_netif->netmask), 255, 255, 255,  0);
 			IP4_ADDR(&(echo_netif->gw),      192, 168,   1,  1);
 		}
