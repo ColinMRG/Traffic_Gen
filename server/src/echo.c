@@ -81,17 +81,11 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 	}
 
 	dma_length = dma_recvd_length();
-
 	int* dma_len_ptr;
-
 	dma_len_ptr = &dma_length;
-
 
 	if (tcp_sndbuf(tpcb) >= TCP_MAX) {
 
-
-
-			xil_printf("dma_length is %d\n\r",dma_length);
 			txlen = (dma_length <= TCP_MAX)?dma_length : TCP_MAX;
 			dma_length -= txlen;
 
@@ -101,18 +95,13 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 				if (dma_length >= 0){
 					err = tcp_write(tpcb,txptr,txlen*4,1);
 					txptr += txlen;
-//					xil_printf(" pointer after the counter %d\n\r",txlen);
-
 				}
 			}
-			// SEND SOS
+			// Send dma length to client
 			else if (command == '2'){
-
-				err = tcp_write(tpcb,*dma_len_ptr,sizeof(int),1);
-				xil_printf("%d\n\r", *dma_len_ptr);
-
+				int len = dma_recvd_length();
+				err = tcp_write(tpcb,&len,sizeof(int),1);
 			}
-
 
 		} else
 		xil_printf("no space in tcp_sndbuf\n\r");
@@ -139,8 +128,6 @@ err_t accept_callback(void *arg, struct tcp_pcb *newpcb, err_t err)
 
 	return ERR_OK;
 }
-
-
 int start_application()
 {
 	struct tcp_pcb *pcb;

@@ -13,9 +13,20 @@ def isOpen(ip , port):
     return False
 
 
+def GetDmaLength(ip, port):
+
+    buffer = 1024
+    write = b'2'
+    s = socket.socket(socket.AF_INET , socket.SOCK_STREAM)
+    s.connect((ip , int(port)))
+    s.send(write)
+    data = s.recv(buffer)
+    data =  int.from_bytes(data,byteorder ='little')
+    s.shutdown(2)
+    return data
 
 def read(ip , port):
-    dma_length = 400
+    dma_length = GetDmaLength(ip, port)
     bytes_recv = 0
     write = b"1"
     s = socket.socket(socket.AF_INET , socket.SOCK_STREAM)
