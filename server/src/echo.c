@@ -38,7 +38,6 @@
 #endif
 
 u32 b[NUM_OF_WORDS];
-int dma_length;
 
 int transfer_data() {
 	return 0;
@@ -53,62 +52,79 @@ void print_app_header()
 #endif
 	xil_printf("TCP packets sent to port 6001 will be echoed back\n\r");
 }
-u32  *txptr = b;
-int txlen = 0;
-int dma();
+
+u32 *pdata = NULL;
+int data_length = 0;
+const char *ok_message = "OK\n\r";
+const char *err_message = "ERR\n\r";
+const char *tbd_message = "...\n\r";
+const char *unknown_message = "???\n\r";
+const char *cr_message = "\n\r";
+
+#define FPGA_RO_SOFT_SCAN_TRIGGER                     0x19
+#define FPGA_RB_SOFT_SCAN_TRIGGER_RF_OVERRIDE_ENABLE  5
+#define FPGA_RB_SOFT_SCAN_TRIGGER_ARM_TO_SCAN         3
+#define FPGA_RB_SOFT_SCAN_TRIGGER_SOFT_SCAN_TRIGGER   1
+#define FPGA_RB_SOFT_SCAN_TRIGGER_TEST_MODE           0
+
 err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
                                struct pbuf *p, err_t err)
 {
+	const char *reply = NULL;
+	int n;
+	char msgbuf[10];
+
 	/* do not read the packet if we are not in ESTABLISHED state */
 	if (!p) {
 		tcp_close(tpcb);
 		tcp_recv(tpcb, NULL);
 		return ERR_OK;
 	}
-	/* indicate that the packet has been received */
-	tcp_recved(tpcb, p->len);
 
 	int command;
 	command = (int)*((u8*)(p->payload));
 
-	int status = dma();
-
-	if (status){
-		for (int i=0; i<NUM_OF_WORDS; i++){
-			b[i]=Xil_In32(OFFSET_MEM_WRITE +4*i);
-		}
-
-	}
-
-	dma_length = dma_recvd_length();
-	int* dma_len_ptr;
-	dma_len_ptr = &dma_length;
-
-	if (tcp_sndbuf(tpcb) >= TCP_MAX) {
-
-			txlen = (dma_length <= TCP_MAX)?dma_length : TCP_MAX;
-			dma_length -= txlen;
-
-			//Condition for sending data
-			if(command == '1'){
-
-				if (dma_length >= 0){
-					err = tcp_write(tpcb,txptr,txlen*4,1);
-					txptr += txlen;
-				}
-			}
-			// Send dma length to client
-			else if (command == '2'){
-				int len = dma_recvd_length();
-				err = tcp_write(tpcb,&len,sizeof(int),1);
-			}
-
-		} else
-		xil_printf("no space in tcp_sndbuf\n\r");
+	/* indicate that the packet has been received */
+	tcp_recved(tpcb, p->len);
 
 	/* free the received pbuf */
 	pbuf_free(p);
 
+	switch (command) {
+	case 'r':
+		// Set up the DMA
+		pdata = dma();
+		data_length = dma_recvd_length();
+		xil_printf("DMA length: %d\n\r", data_length);
+		reply = (pdata == NULL) ? err_message : ok_message;
+		err = tcp_write(tpcb, reply, strlen(reply), 1);
+		xil_printf("Restarted DMA at %08X\n\r", (u32)pdata);
+		break;
+	case 's':
+		// Run SOS and return the data length
+		xil_printf("command = %d\n\r", command);
+		wait_for_dma_done();
+		data_length = dma_recvd_length();
+		err = tcp_write(tpcb, &data_length, sizeof(int), 1);
+		xil_printf("DMA length: %d\n\r", data_length);
+		break;
+	case 'd':
+		n = (data_length <= TCP_MSS) ? data_length : TCP_MSS;
+		err = tcp_write(tpcb, pdata,n, 1);
+		xil_printf("Sent %d bytes\n\r", n);
+		data_length -= n;
+		pdata += n/sizeof(u32);
+		break;
+	case '\n':
+	case '\r':
+		err = tcp_write(tpcb, cr_message, strlen(cr_message), 1);
+		break;
+	default:
+		err = tcp_write(tpcb, unknown_message, strlen(unknown_message), 1);
+		xil_printf("Unknown command: %c\n\r", command);
+	}
+
+	tcp_output(tpcb);
 	return ERR_OK;
 }
 
@@ -128,26 +144,24 @@ err_t accept_callback(void *arg, struct tcp_pcb *newpcb, err_t err)
 
 	return ERR_OK;
 }
+
 int start_application()
 {
 	struct tcp_pcb *pcb;
 	err_t err;
 	unsigned port = 7;
-
 	/* create new TCP PCB structure */
 	pcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
 	if (!pcb) {
 		xil_printf("Error creating PCB. Out of Memory\n\r");
 		return -1;
 	}
-
 	/* bind to specified @port */
 	err = tcp_bind(pcb, IP_ANY_TYPE, port);
 	if (err != ERR_OK) {
 		xil_printf("Unable to bind to port %d: err = %d\n\r", port, err);
 		return -2;
 	}
-
 	/* we do not need any arguments to callback functions */
 	tcp_arg(pcb, NULL);
 
@@ -157,11 +171,8 @@ int start_application()
 		xil_printf("Out of memory while tcp_listen\n\r");
 		return -3;
 	}
-
 	/* specify callback to use for incoming connections */
 	tcp_accept(pcb, accept_callback);
-
 	xil_printf("TCP echo server started @ port %d\n\r", port);
-
 	return 0;
 }

@@ -5,15 +5,12 @@
 #include <xil_io.h>
 #include "xscugic.h"
 #include "xparameters.h"
+#include "addressparams.h"
 #include "xaxidma_hw.h"
+#include "xil_cache.h"
 
-#include "../../server/src/addressparams.h"
-
-
-u32 dmabuf[BUF_LEN/4];
-
+u32 dmabuf[NUM_OF_WORDS];
 XScuGic InterruptController;
-
 static XScuGic_Config *GicConfig;
 unsigned int frame_count = 0;
 
@@ -37,7 +34,6 @@ int SetupInterruptSystem(XScuGic *xScuGicInstancePtr)
 }
 
 int interrupt(){
-
 	int status = XScuGic_CfgInitialize(&InterruptController, GicConfig, GicConfig -> CpuBaseAddress);
 	if (status != XST_SUCCESS)
 	{
@@ -54,15 +50,11 @@ int interrupt(){
 		return XST_FAILURE;
 	}
 	XScuGic_Enable(&InterruptController, XPAR_FABRIC_AXI_DMA_0_S2MM_INTROUT_INTR);
-
+	return XST_SUCCESS;
 }
 
-int dma()
+u32 *dma()
 {
-		static u32 buffer[NUM_OF_WORDS];
-//		u32* ptr;
-//		*buf = buffer;
-//		ptr = *buf;
 
     	// Initialize DMA (Set bits 0 and 12 of the DMA control register)
     	Xil_Out32(XPAR_AXI_DMA_0_BASEADDR + OFFSET_S2MM_DMACR, Xil_In32(XPAR_AXI_DMA_0_BASEADDR + OFFSET_S2MM_DMACR) | 0x1001);
@@ -71,21 +63,26 @@ int dma()
     	GicConfig = XScuGic_LookupConfig(XPAR_PS7_SCUGIC_0_DEVICE_ID);
     	if (NULL == GicConfig)
     	{
-    		return XST_FAILURE;
+    		return NULL;
     	}
-//    	 interrupt();
 
-		//Program DMA transfer parameters (i) destination address (ii) length
-		Xil_Out32(XPAR_AXI_DMA_0_BASEADDR+OFFSET_S2MMDA, OFFSET_MEM_WRITE);
+    	memset(dmabuf, 0, sizeof(dmabuf));
+    	Xil_DCacheFlush();
+		Xil_DCacheInvalidate();
+    	//Program DMA transfer parameters (i) destination address (ii) length
+		Xil_Out32(XPAR_AXI_DMA_0_BASEADDR+OFFSET_S2MMDA, (u32)dmabuf);
 		Xil_Out32(XPAR_AXI_DMA_0_BASEADDR+OFFSET_S2MM_LENGTH, BUF_LEN);
 
-		//Enable traffic generator
+
 		Xil_Out32(XPAR_TRAFFICGEN_0_S00_AXI_BASEADDR, 1);
 		Xil_Out32(XPAR_TRAFFICGEN_0_S00_AXI_BASEADDR+0x4, NUM_OF_WORDS);
 
-		return buffer;
+		return dmabuf;
 
 }
+
+#define XAXIDMA_SR_IDLE_MASK 0x00000002
+
 int wait_for_dma_done()
 {
 	u32 status;
@@ -105,6 +102,7 @@ int dma_recvd_length()
 		if (dmabuf[i] == 0)
 			break;
 	}
+	xil_printf("first zero in dmabuf at %d\r\n", i);
 	u32 word = Xil_In32(XPAR_AXI_DMA_0_BASEADDR + XAXIDMA_RX_OFFSET + XAXIDMA_BUFFLEN_OFFSET);
 	int length = word & 0x000FFFFF;
 	return length;

@@ -5,7 +5,7 @@
 #define OFFSET_S2MM_LENGTH 0x58 // S2MM buffer length
 
 
-#define NUM_OF_WORDS 1000
+#define NUM_OF_WORDS 256
 #define BUF_LEN      600000
 #define FRAME_COUNT_MAX 1
 #define TCP_MAX     2048
@@ -14,3 +14,4 @@
 
 int wait_for_dma_done();
 int dma_recvd_length();
+
